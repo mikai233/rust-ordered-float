@@ -7,8 +7,6 @@
 
 #[cfg(feature = "std")]
 extern crate std;
-#[cfg(feature = "std")]
-use std::error::Error;
 
 use core::borrow::Borrow;
 use core::cmp::Ordering;
@@ -23,13 +21,15 @@ use core::ops::{
     SubAssign,
 };
 use core::str::FromStr;
+#[cfg(feature = "std")]
+use std::error::Error;
 
-pub use num_traits::float::FloatCore;
 use num_traits::{
     AsPrimitive, Bounded, FloatConst, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero,
 };
 #[cfg(feature = "std")]
 pub use num_traits::{Float, Pow};
+pub use num_traits::float::FloatCore;
 
 #[cfg(feature = "rand")]
 pub use impl_rand::{UniformNotNan, UniformOrdered};
@@ -502,27 +502,27 @@ impl_ordered_float_self_pow! {f64, f64}
 
 /// Adds a float directly.
 impl<T: FloatCore + Sum> Sum for OrderedFloat<T> {
-    fn sum<I: Iterator<Item = OrderedFloat<T>>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item=OrderedFloat<T>>>(iter: I) -> Self {
         OrderedFloat(iter.map(|v| v.0).sum())
     }
 }
 
 impl<'a, T: FloatCore + Sum + 'a> Sum<&'a OrderedFloat<T>> for OrderedFloat<T> {
     #[inline]
-    fn sum<I: Iterator<Item = &'a OrderedFloat<T>>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item=&'a OrderedFloat<T>>>(iter: I) -> Self {
         iter.cloned().sum()
     }
 }
 
 impl<T: FloatCore + Product> Product for OrderedFloat<T> {
-    fn product<I: Iterator<Item = OrderedFloat<T>>>(iter: I) -> Self {
+    fn product<I: Iterator<Item=OrderedFloat<T>>>(iter: I) -> Self {
         OrderedFloat(iter.map(|v| v.0).product())
     }
 }
 
 impl<'a, T: FloatCore + Product + 'a> Product<&'a OrderedFloat<T>> for OrderedFloat<T> {
     #[inline]
-    fn product<I: Iterator<Item = &'a OrderedFloat<T>>>(iter: I) -> Self {
+    fn product<I: Iterator<Item=&'a OrderedFloat<T>>>(iter: I) -> Self {
         iter.cloned().product()
     }
 }
@@ -590,8 +590,8 @@ impl<T: Neg> Neg for OrderedFloat<T> {
 }
 
 impl<'a, T> Neg for &'a OrderedFloat<T>
-where
-    &'a T: Neg,
+    where
+        &'a T: Neg,
 {
     type Output = OrderedFloat<<&'a T as Neg>::Output>;
 
@@ -1130,8 +1130,8 @@ impl<T> NotNan<T> {
     ///
     /// Behaviour is undefined if `val` is NaN
     #[deprecated(
-        since = "2.5.0",
-        note = "Please use the new_unchecked function instead."
+    since = "2.5.0",
+    note = "Please use the new_unchecked function instead."
     )]
     #[inline]
     pub const unsafe fn unchecked_new(val: T) -> Self {
@@ -1295,14 +1295,14 @@ impl<T: FloatCore> Add<T> for NotNan<T> {
 ///
 /// Panics if the provided value is NaN.
 impl<T: FloatCore + Sum> Sum for NotNan<T> {
-    fn sum<I: Iterator<Item = NotNan<T>>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item=NotNan<T>>>(iter: I) -> Self {
         NotNan::new(iter.map(|v| v.0).sum()).expect("Sum resulted in NaN")
     }
 }
 
 impl<'a, T: FloatCore + Sum + 'a> Sum<&'a NotNan<T>> for NotNan<T> {
     #[inline]
-    fn sum<I: Iterator<Item = &'a NotNan<T>>>(iter: I) -> Self {
+    fn sum<I: Iterator<Item=&'a NotNan<T>>>(iter: I) -> Self {
         iter.cloned().sum()
     }
 }
@@ -1332,14 +1332,14 @@ impl<T: FloatCore> Mul<T> for NotNan<T> {
 }
 
 impl<T: FloatCore + Product> Product for NotNan<T> {
-    fn product<I: Iterator<Item = NotNan<T>>>(iter: I) -> Self {
+    fn product<I: Iterator<Item=NotNan<T>>>(iter: I) -> Self {
         NotNan::new(iter.map(|v| v.0).product()).expect("Product resulted in NaN")
     }
 }
 
 impl<'a, T: FloatCore + Product + 'a> Product<&'a NotNan<T>> for NotNan<T> {
     #[inline]
-    fn product<I: Iterator<Item = &'a NotNan<T>>>(iter: I) -> Self {
+    fn product<I: Iterator<Item=&'a NotNan<T>>>(iter: I) -> Self {
         iter.cloned().product()
     }
 }
@@ -1864,16 +1864,20 @@ impl_float_const!(NotNan, |x| unsafe { NotNan::new_unchecked(x) });
 #[cfg(feature = "serde")]
 mod impl_serde {
     extern crate serde;
-    use self::serde::de::{Error, Unexpected};
-    use self::serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use super::{NotNan, OrderedFloat};
+
     use core::f64;
+
     use num_traits::float::FloatCore;
+
+    use super::{NotNan, OrderedFloat};
+
+    use self::serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use self::serde::de::{Error, Unexpected};
+    #[cfg(test)]
+    use self::serde_test::{assert_de_tokens_error, assert_tokens, Token};
 
     #[cfg(test)]
     extern crate serde_test;
-    #[cfg(test)]
-    use self::serde_test::{assert_de_tokens_error, assert_tokens, Token};
 
     impl<T: FloatCore + Serialize> Serialize for OrderedFloat<T> {
         #[inline]
@@ -1926,13 +1930,69 @@ mod impl_serde {
     }
 }
 
+#[cfg(feature = "bincode")]
+mod impl_bincode {
+    use bincode::{BorrowDecode, Decode, Encode};
+    use bincode::de::{BorrowDecoder, Decoder};
+    use bincode::enc::Encoder;
+    use bincode::error::{DecodeError, EncodeError};
+    use num_traits::float::FloatCore;
+
+    use crate::{NotNan, OrderedFloat};
+
+    impl<T: FloatCore + Encode> Encode for OrderedFloat<T> {
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+            self.0.encode(encoder)
+        }
+    }
+
+    impl<T: FloatCore + Decode> Decode for OrderedFloat<T> {
+        fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+            Decode::decode(decoder).map(OrderedFloat)
+        }
+    }
+
+    impl<'de, T: FloatCore + Decode> BorrowDecode<'de> for OrderedFloat<T> {
+        fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+            Decode::decode(decoder)
+        }
+    }
+
+    impl<T: FloatCore + Encode> Encode for NotNan<T> {
+        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+            self.0.encode(encoder)
+        }
+    }
+
+    impl<T: FloatCore + Decode> Decode for NotNan<T> {
+        fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+            let float = Decode::decode(decoder)?;
+            NotNan::new(float).map_err(|_| { DecodeError::Other("float (but not NaN)") })
+        }
+    }
+
+    impl<'de, T: FloatCore + Decode> BorrowDecode<'de> for NotNan<T> {
+        fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+            Decode::decode(decoder)
+        }
+    }
+}
+
 #[cfg(any(feature = "rkyv_16", feature = "rkyv_32", feature = "rkyv_64"))]
 mod impl_rkyv {
-    use super::{NotNan, OrderedFloat};
+    #[cfg(feature = "rkyv_ck")]
+    use core::convert::Infallible;
+
     use num_traits::float::FloatCore;
     #[cfg(test)]
     use rkyv::{archived_root, ser::Serializer};
     use rkyv::{Archive, Deserialize, Fallible, Serialize};
+    #[cfg(feature = "rkyv_ck")]
+    use rkyv::bytecheck::CheckBytes;
+
+    use super::{NotNan, OrderedFloat};
+    #[cfg(feature = "rkyv_ck")]
+    use super::FloatIsNan;
 
     #[cfg(test)]
     type DefaultSerializer = rkyv::ser::serializers::CoreSerializer<16, 16>;
@@ -1956,7 +2016,7 @@ mod impl_rkyv {
     }
 
     impl<T: FloatCore, AT: Deserialize<T, D>, D: Fallible + ?Sized> Deserialize<OrderedFloat<T>, D>
-        for OrderedFloat<AT>
+    for OrderedFloat<AT>
     {
         fn deserialize(&self, d: &mut D) -> Result<OrderedFloat<T>, D::Error> {
             self.0.deserialize(d).map(OrderedFloat)
@@ -1980,7 +2040,7 @@ mod impl_rkyv {
     }
 
     impl<T: FloatCore, AT: Deserialize<T, D>, D: Fallible + ?Sized> Deserialize<NotNan<T>, D>
-        for NotNan<AT>
+    for NotNan<AT>
     {
         fn deserialize(&self, d: &mut D) -> Result<NotNan<T>, D::Error> {
             self.0.deserialize(d).map(NotNan)
@@ -2026,13 +2086,6 @@ mod impl_rkyv {
     rkyv_eq_ord! { NotNan, f32, rkyv::rend::f32_be }
     rkyv_eq_ord! { NotNan, f64, rkyv::rend::f64_le }
     rkyv_eq_ord! { NotNan, f64, rkyv::rend::f64_be }
-
-    #[cfg(feature = "rkyv_ck")]
-    use super::FloatIsNan;
-    #[cfg(feature = "rkyv_ck")]
-    use core::convert::Infallible;
-    #[cfg(feature = "rkyv_ck")]
-    use rkyv::bytecheck::CheckBytes;
 
     #[cfg(feature = "rkyv_ck")]
     impl<C: ?Sized, T: FloatCore + CheckBytes<C>> CheckBytes<C> for OrderedFloat<T> {
@@ -2091,14 +2144,15 @@ mod impl_rkyv {
 
 #[cfg(feature = "speedy")]
 mod impl_speedy {
-    use super::{NotNan, OrderedFloat};
     use num_traits::float::FloatCore;
     use speedy::{Context, Readable, Reader, Writable, Writer};
 
+    use super::{NotNan, OrderedFloat};
+
     impl<C, T> Writable<C> for OrderedFloat<T>
-    where
-        C: Context,
-        T: Writable<C>,
+        where
+            C: Context,
+            T: Writable<C>,
     {
         fn write_to<W: ?Sized + Writer<C>>(&self, writer: &mut W) -> Result<(), C::Error> {
             self.0.write_to(writer)
@@ -2110,9 +2164,9 @@ mod impl_speedy {
     }
 
     impl<C, T> Writable<C> for NotNan<T>
-    where
-        C: Context,
-        T: Writable<C>,
+        where
+            C: Context,
+            T: Writable<C>,
     {
         fn write_to<W: ?Sized + Writer<C>>(&self, writer: &mut W) -> Result<(), C::Error> {
             self.0.write_to(writer)
@@ -2124,8 +2178,8 @@ mod impl_speedy {
     }
 
     impl<'a, T, C: Context> Readable<'a, C> for OrderedFloat<T>
-    where
-        T: Readable<'a, C>,
+        where
+            T: Readable<'a, C>,
     {
         fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
             T::read_from(reader).map(OrderedFloat)
@@ -2137,8 +2191,8 @@ mod impl_speedy {
     }
 
     impl<'a, T: FloatCore, C: Context> Readable<'a, C> for NotNan<T>
-    where
-        T: Readable<'a, C>,
+        where
+            T: Readable<'a, C>,
     {
         fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
             let value: T = reader.read_value()?;
@@ -2179,12 +2233,14 @@ mod impl_speedy {
 #[cfg(feature = "borsh")]
 mod impl_borsh {
     extern crate borsh;
-    use super::{NotNan, OrderedFloat};
+
     use num_traits::float::FloatCore;
 
+    use super::{NotNan, OrderedFloat};
+
     impl<T> borsh::BorshSerialize for OrderedFloat<T>
-    where
-        T: borsh::BorshSerialize,
+        where
+            T: borsh::BorshSerialize,
     {
         #[inline]
         fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
@@ -2193,8 +2249,8 @@ mod impl_borsh {
     }
 
     impl<T> borsh::BorshDeserialize for OrderedFloat<T>
-    where
-        T: borsh::BorshDeserialize,
+        where
+            T: borsh::BorshDeserialize,
     {
         #[inline]
         fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
@@ -2203,8 +2259,8 @@ mod impl_borsh {
     }
 
     impl<T> borsh::BorshSerialize for NotNan<T>
-    where
-        T: borsh::BorshSerialize,
+        where
+            T: borsh::BorshSerialize,
     {
         #[inline]
         fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
@@ -2213,8 +2269,8 @@ mod impl_borsh {
     }
 
     impl<T> borsh::BorshDeserialize for NotNan<T>
-    where
-        T: FloatCore + borsh::BorshDeserialize,
+        where
+            T: FloatCore + borsh::BorshDeserialize,
     {
         #[inline]
         fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
@@ -2250,9 +2306,11 @@ mod impl_borsh {
 #[cfg(all(feature = "std", feature = "schemars"))]
 mod impl_schemars {
     extern crate schemars;
+
+    use super::{NotNan, OrderedFloat};
+
     use self::schemars::gen::SchemaGenerator;
     use self::schemars::schema::{InstanceType, Schema, SchemaObject};
-    use super::{NotNan, OrderedFloat};
 
     macro_rules! primitive_float_impl {
         ($type:ty, $schema_name:literal) => {
@@ -2341,6 +2399,7 @@ mod impl_schemars {
             );
         }
     }
+
     #[test]
     fn ordered_float_schema_match_primitive_schema() {
         {
@@ -2376,10 +2435,11 @@ mod impl_schemars {
 
 #[cfg(feature = "rand")]
 mod impl_rand {
-    use super::{NotNan, OrderedFloat};
-    use rand::distributions::uniform::*;
     use rand::distributions::{Distribution, Open01, OpenClosed01, Standard};
+    use rand::distributions::uniform::*;
     use rand::Rng;
+
+    use super::{NotNan, OrderedFloat};
 
     macro_rules! impl_distribution {
         ($dist:ident, $($f:ty),+) => {
@@ -2410,15 +2470,18 @@ mod impl_rand {
     #[derive(Clone, Copy, Debug)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct UniformNotNan<T>(UniformFloat<T>);
+
     impl SampleUniform for NotNan<f32> {
         type Sampler = UniformNotNan<f32>;
     }
+
     impl SampleUniform for NotNan<f64> {
         type Sampler = UniformNotNan<f64>;
     }
+
     impl<T> PartialEq for UniformNotNan<T>
-    where
-        UniformFloat<T>: PartialEq,
+        where
+            UniformFloat<T>: PartialEq,
     {
         fn eq(&self, other: &Self) -> bool {
             self.0 == other.0
@@ -2429,15 +2492,18 @@ mod impl_rand {
     #[derive(Clone, Copy, Debug)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct UniformOrdered<T>(UniformFloat<T>);
+
     impl SampleUniform for OrderedFloat<f32> {
         type Sampler = UniformOrdered<f32>;
     }
+
     impl SampleUniform for OrderedFloat<f64> {
         type Sampler = UniformOrdered<f64>;
     }
+
     impl<T> PartialEq for UniformOrdered<T>
-    where
-        UniformFloat<T>: PartialEq,
+        where
+            UniformFloat<T>: PartialEq,
     {
         fn eq(&self, other: &Self) -> bool {
             self.0 == other.0
@@ -2499,14 +2565,14 @@ mod impl_rand {
         use super::*;
 
         fn sample_fuzz<T>()
-        where
-            Standard: Distribution<NotNan<T>>,
-            Open01: Distribution<NotNan<T>>,
-            OpenClosed01: Distribution<NotNan<T>>,
-            Standard: Distribution<OrderedFloat<T>>,
-            Open01: Distribution<OrderedFloat<T>>,
-            OpenClosed01: Distribution<OrderedFloat<T>>,
-            T: crate::Float,
+            where
+                Standard: Distribution<NotNan<T>>,
+                Open01: Distribution<NotNan<T>>,
+                OpenClosed01: Distribution<NotNan<T>>,
+                Standard: Distribution<OrderedFloat<T>>,
+                Open01: Distribution<OrderedFloat<T>>,
+                OpenClosed01: Distribution<OrderedFloat<T>>,
+                T: crate::Float,
         {
             let mut rng = rand::thread_rng();
             let f1: NotNan<T> = rng.sample(Standard);
@@ -2561,11 +2627,13 @@ mod impl_rand {
 
 #[cfg(feature = "proptest")]
 mod impl_proptest {
-    use super::{NotNan, OrderedFloat};
+    use std::convert::TryFrom;
+
     use proptest::arbitrary::{Arbitrary, StrategyFor};
     use proptest::num::{f32, f64};
     use proptest::strategy::{FilterMap, Map, Strategy};
-    use std::convert::TryFrom;
+
+    use super::{NotNan, OrderedFloat};
 
     macro_rules! impl_arbitrary {
         ($($f:ident),+) => {
@@ -2594,9 +2662,10 @@ mod impl_proptest {
 
 #[cfg(feature = "arbitrary")]
 mod impl_arbitrary {
-    use super::{FloatIsNan, NotNan, OrderedFloat};
     use arbitrary::{Arbitrary, Unstructured};
     use num_traits::FromPrimitive;
+
+    use super::{FloatIsNan, NotNan, OrderedFloat};
 
     macro_rules! impl_arbitrary {
         ($($f:ident),+) => {
@@ -2656,8 +2725,9 @@ mod impl_arbitrary {
 
 #[cfg(feature = "bytemuck")]
 mod impl_bytemuck {
-    use super::{FloatCore, NotNan, OrderedFloat};
     use bytemuck::{AnyBitPattern, CheckedBitPattern, NoUninit, Pod, Zeroable};
+
+    use super::{FloatCore, NotNan, OrderedFloat};
 
     unsafe impl<T: Zeroable> Zeroable for OrderedFloat<T> {}
 
@@ -2681,7 +2751,7 @@ mod impl_bytemuck {
 
     #[test]
     fn test_not_nan_bit_pattern() {
-        use bytemuck::checked::{try_cast, CheckedCastError};
+        use bytemuck::checked::{CheckedCastError, try_cast};
 
         let nan = f64::NAN;
         assert_eq!(
